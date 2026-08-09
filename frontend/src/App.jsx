@@ -8,6 +8,7 @@ import VerifySignature from "./components/VerifySignature";
 import ThemeControls from "./components/ThemeControls";
 import CommandPalette from "./components/CommandPalette";
 import { usePrefersReducedMotion } from "./hooks";
+import { useLoadingBar } from "./components/LoadingBar";
 
 import "./App.css";
 
@@ -106,13 +107,21 @@ function App() {
 
   const navRef = useRef(null);
   const tabRefs = useRef({});
+  const { start: startLoadingBar, done: finishLoadingBar } = useLoadingBar();
 
   useSpotlight();
   useParallax();
 
   function changeTab(tabName) {
+    if (tabName === activeTab) {
+      return;
+    }
+
     sessionStorage.setItem(TAB_STORAGE_KEY, tabName);
     setActiveTab(tabName);
+
+    startLoadingBar();
+    window.setTimeout(finishLoadingBar, 260);
   }
 
   function verifyEntry(block) {

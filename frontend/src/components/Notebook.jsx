@@ -1,18 +1,16 @@
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useEffect, useMemo, useState } from "react";
 import CopyGlyph from "./CopyGlyph";
 import Magnetic from "./Magnetic";
+import Blocky from "./Blocky";
+import QrReveal from "./QrReveal";
 import { useCountUp, useInView } from "../hooks";
 import { useToast } from "./Toast";
+import { useLoadingBar } from "./LoadingBar";
+import { verifyChain } from "../chainVerify";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
-function fingerprint(value = "") {
-  if (!value) {
-    return "—";
-  }
-
-  return String(value).slice(0, 16);
-}
+const PAGE_SIZE = 24;
 
 async function copyToClipboard(value) {
   const text = String(value ?? "");
@@ -92,12 +90,29 @@ const CopyButton = forwardRef(function CopyButton(
   );
 });
 
-function NotebookEntry({ block, onVerifyEntry, onError }) {
+function ChainConnector({ valid }) {
+  return (
+    <div className={`chain-connector ${valid ? "valid" : "broken"}`} aria-hidden="true">
+      <span className="chain-stub" />
+
+      <span className="chain-links">
+        <span className="chain-link chain-link-a" />
+        <span className="chain-link chain-link-b" />
+      </span>
+
+      <span className="chain-stub" />
+    </div>
+  );
+}
+
+function NotebookEntry({ block, chainInfo, onVerifyEntry, onError }) {
   const [ref, inView] = useInView();
 
   function createBlockJson() {
     return JSON.stringify(block, null, 2);
   }
+
+  const verified = Boolean(chainInfo?.valid);
 
   return (
     <article
@@ -105,13 +120,22 @@ function NotebookEntry({ block, onVerifyEntry, onError }) {
       className={`block-card explorer-card reveal ${inView ? "is-visible" : ""}`}
     >
       <div className="block-heading">
-        <div>
-          <span className="block-number">Entry #{block.index}</span>
+        <div className="block-heading-id">
+          <Blocky seed={block.eth_address || String(block.index)} size={30} />
 
-          <p>{block.timestamp || "No timestamp"}</p>
+          <div>
+            <span className="block-number">Entry #{block.index}</span>
+
+            <p>{block.timestamp || "No timestamp"}</p>
+          </div>
         </div>
 
-        <span className="valid-badge">Stored</span>
+        <span
+          className={verified ? "valid-badge" : "invalid-badge"}
+          title={verified ? "Hash, signature and chain link verified in your browser" : "Verification failed — see details"}
+        >
+          {verified ? "✓ Verified" : "⚠ Broken"}
+        </span>
       </div>
 
       <div className="message-box explorer-message-box">
@@ -147,6 +171,8 @@ function NotebookEntry({ block, onVerifyEntry, onError }) {
               {block.eth_address || "—"}
             </dd>
 
+            <QrReveal value={block.eth_address} />
+
             <CopyButton
               value={block.eth_address}
               defaultLabel="Copy"
@@ -163,6 +189,8 @@ function NotebookEntry({ block, onVerifyEntry, onError }) {
             <dd className="ownership-address" title={block.signature || ""}>
               {block.signature || "—"}
             </dd>
+
+            <QrReveal value={block.signature} />
 
             <CopyButton
               value={block.signature}
@@ -181,6 +209,8 @@ function NotebookEntry({ block, onVerifyEntry, onError }) {
               {block.hash || "—"}
             </dd>
 
+            <QrReveal value={block.hash} />
+
             <CopyButton
               value={block.hash}
               defaultLabel="Copy"
@@ -190,10 +220,21 @@ function NotebookEntry({ block, onVerifyEntry, onError }) {
           </div>
         </div>
 
-        <div>
-          <dt>Previous Fingerprint</dt>
+        <div className="ownership-item">
+          <dt>Previous Hash</dt>
 
-          <dd title={block.previous_hash || ""}>{fingerprint(block.previous_hash)}</dd>
+          <div className="ownership-row">
+            <dd className="ownership-address" title={block.previous_hash || ""}>
+              {block.previous_hash || "—"}
+            </dd>
+
+            <CopyButton
+              value={block.previous_hash}
+              defaultLabel="Copy"
+              className="ownership-copy"
+              onError={onError}
+            />
+          </div>
         </div>
       </dl>
 
@@ -221,18 +262,38 @@ function SkeletonEntry() {
   );
 }
 
+function matchesQuery(block, query) {
+  if (!query) {
+    return true;
+  }
+
+  const needle = query.toLowerCase();
+
+  return (
+    (block.message || "").toLowerCase().includes(needle) ||
+    (block.eth_address || "").toLowerCase().includes(needle) ||
+    (block.hash || "").toLowerCase().includes(needle)
+  );
+}
+
 export default function Notebook({ refreshKey, onVerifyEntry }) {
   const [blocks, setBlocks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const toast = useToast();
+  const { start: startLoadingBar, done: finishLoadingBar } = useLoadingBar();
   const animatedCount = useCountUp(blocks.length, 700);
+
+  const chainStatus = useMemo(() => verifyChain(blocks), [blocks]);
 
   async function loadBlocks() {
     try {
       setLoading(true);
       setError("");
+      startLoadingBar();
 
       const response = await fetch(`${API_URL}/api/chain`, {
         method: "GET",
@@ -288,6 +349,7 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
       setError(loadError?.message || "Could not load notebook.");
     } finally {
       setLoading(false);
+      finishLoadingBar();
     }
   }
 
@@ -333,6 +395,9 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
   }
 
   const newestFirstBlocks = [...blocks].sort((blockA, blockB) => blockB.index - blockA.index);
+  const filteredBlocks = newestFirstBlocks.filter((block) => matchesQuery(block, query));
+  const visibleBlocks = filteredBlocks.slice(0, visibleCount);
+  const hasMore = filteredBlocks.length > visibleBlocks.length;
 
   const statusText = loading
     ? "Loading notebook..."
@@ -345,6 +410,10 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
   useEffect(() => {
     loadBlocks();
   }, [refreshKey]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [query, blocks]);
 
   return (
     <section className="panel explorer-panel">
@@ -396,6 +465,22 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
 
         .explorer-card {
           overflow: hidden;
+        }
+
+        .block-heading-id {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .blocky-avatar,
+        .blocky-placeholder {
+          flex: 0 0 auto;
+          box-sizing: border-box;
+          padding: 5px;
+          border-radius: 10px;
+          border: 1px solid var(--hairline);
+          background: var(--surface-sunken);
         }
 
         .explorer-message-box {
@@ -532,6 +617,37 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
           cursor: not-allowed;
         }
 
+        .qr-reveal {
+          position: relative;
+          flex: 0 0 auto;
+        }
+
+        .qr-popover {
+          position: absolute;
+          z-index: 20;
+          bottom: calc(100% + 10px);
+          right: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 156px;
+          height: 156px;
+          padding: 8px;
+          border: 1px solid var(--hairline-strong);
+          border-radius: 12px;
+          background: var(--surface-raised);
+          box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
+          animation: paletteIn 0.18s var(--ease-out) both;
+        }
+
+        .qr-popover img {
+          width: 100%;
+          height: 100%;
+          border-radius: 6px;
+        }
+
         .explorer-error {
           margin-bottom: 18px;
         }
@@ -552,6 +668,155 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
         .skeleton-stack {
           display: grid;
           gap: 18px;
+        }
+
+        .search-row {
+          position: relative;
+          margin-bottom: 20px;
+        }
+
+        .search-row svg {
+          position: absolute;
+          top: 50%;
+          left: 15px;
+          transform: translateY(-50%);
+          width: 16px;
+          height: 16px;
+          color: var(--ink-faint);
+          pointer-events: none;
+        }
+
+        .search-row input {
+          width: 100%;
+          min-height: 46px;
+          padding: 0 15px 0 42px;
+          border: 1px solid var(--hairline);
+          border-radius: 13px;
+          outline: none;
+          background: var(--surface-sunken);
+          color: var(--ink);
+          font-size: 14px;
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .search-row input:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+        }
+
+        .search-empty {
+          padding: 40px 20px;
+          color: var(--ink-faint);
+          text-align: center;
+          font-size: 14px;
+        }
+
+        .chain-connector {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          height: 46px;
+          margin: -9px 0;
+        }
+
+        .chain-stub {
+          flex: 1;
+          min-height: 5px;
+          width: 2px;
+          background: var(--hairline-strong);
+          transition: background 0.3s ease;
+        }
+
+        .chain-connector.valid .chain-stub {
+          background: var(--success);
+          opacity: 0.4;
+        }
+
+        .chain-connector.broken .chain-stub {
+          background: var(--danger);
+          opacity: 0.5;
+        }
+
+        .chain-links {
+          position: relative;
+          flex: 0 0 auto;
+          width: 24px;
+          height: 27px;
+        }
+
+        .chain-link {
+          position: absolute;
+          left: 50%;
+          box-sizing: border-box;
+          border: 3px solid var(--hairline-strong);
+          border-radius: 999px;
+          background: var(--surface-sunken);
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+          transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease,
+            top 0.3s ease, bottom 0.3s ease;
+        }
+
+        .chain-link-a {
+          top: 0;
+          width: 13px;
+          height: 17px;
+          transform: translateX(-50%);
+        }
+
+        .chain-link-b {
+          bottom: 0;
+          width: 21px;
+          height: 13px;
+          transform: translateX(-50%);
+        }
+
+        .chain-connector.valid .chain-link {
+          border-color: var(--success);
+          box-shadow: 0 0 7px color-mix(in srgb, var(--success) 55%, transparent),
+            inset 0 1px 1px rgba(255, 255, 255, 0.15);
+        }
+
+        .chain-connector.broken .chain-link {
+          border-color: var(--danger);
+          box-shadow: 0 0 7px color-mix(in srgb, var(--danger) 55%, transparent),
+            inset 0 1px 1px rgba(255, 255, 255, 0.15);
+        }
+
+        .chain-connector.broken .chain-link-a {
+          top: -3px;
+          transform: translateX(-78%) rotate(-16deg);
+        }
+
+        .chain-connector.broken .chain-link-b {
+          bottom: -3px;
+          transform: translateX(-22%) rotate(12deg);
+        }
+
+        .chain-origin-cap {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          justify-content: center;
+          margin: 2px 0 4px;
+          color: var(--ink-faint);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .chain-origin-cap::before,
+        .chain-origin-cap::after {
+          content: "";
+          width: 28px;
+          height: 1px;
+          background: var(--hairline-strong);
+        }
+
+        .load-more-row {
+          display: flex;
+          justify-content: center;
+          margin-top: 22px;
         }
 
         @media (max-width: 640px) {
@@ -615,6 +880,12 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
           .explorer-card .block-details {
             grid-template-columns: 1fr;
           }
+
+          .qr-popover {
+            right: auto;
+            left: 50%;
+            transform: translateX(-50%);
+          }
         }
       `}</style>
 
@@ -652,6 +923,22 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
 
       {error && <div className="alert explorer-error">{error}</div>}
 
+      {blocks.length > 0 && (
+        <div className="search-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="7.5" />
+            <path d="m21 21-4.6-4.6" />
+          </svg>
+
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by message, address or hash..."
+            aria-label="Search notebook entries"
+          />
+        </div>
+      )}
+
       {loading && blocks.length === 0 && (
         <div className="skeleton-stack">
           <SkeletonEntry />
@@ -675,16 +962,47 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
         </div>
       )}
 
+      {blocks.length > 0 && filteredBlocks.length === 0 && (
+        <div className="search-empty">No entries match &ldquo;{query}&rdquo;.</div>
+      )}
+
       <div className="block-list">
-        {newestFirstBlocks.map((block) => (
-          <NotebookEntry
-            key={block.hash || `${block.index}-${block.timestamp}`}
-            block={block}
-            onVerifyEntry={onVerifyEntry}
-            onError={setError}
-          />
-        ))}
+        {visibleBlocks.map((block, position) => {
+          const isLastVisible = position === visibleBlocks.length - 1;
+          const isGenesis = block.index === 0;
+
+          return (
+            <div key={block.hash || `${block.index}-${block.timestamp}`}>
+              <NotebookEntry
+                block={block}
+                chainInfo={chainStatus.get(block.index)}
+                onVerifyEntry={onVerifyEntry}
+                onError={setError}
+              />
+
+              {!query && isGenesis && <div className="chain-origin-cap">Genesis</div>}
+
+              {!query && !isGenesis && (!isLastVisible || !hasMore) && (
+                <ChainConnector valid={Boolean(chainStatus.get(block.index)?.linkValid)} />
+              )}
+            </div>
+          );
+        })}
       </div>
+
+      {hasMore && (
+        <div className="load-more-row">
+          <button
+            type="button"
+            className="explorer-top-button"
+            onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+          >
+            Load {Math.min(PAGE_SIZE, filteredBlocks.length - visibleBlocks.length)} more
+            {" "}
+            ({filteredBlocks.length - visibleBlocks.length} remaining)
+          </button>
+        </div>
+      )}
     </section>
   );
 }
