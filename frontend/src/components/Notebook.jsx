@@ -662,13 +662,6 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
           margin-bottom: 18px;
         }
 
-        .explorer-api-info {
-          margin-top: 8px;
-          font-size: 12px;
-          opacity: 0.65;
-          overflow-wrap: anywhere;
-        }
-
         .entry-verify-row {
           display: flex;
           justify-content: flex-end;
@@ -943,8 +936,6 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
           <h2>Notebook</h2>
 
           <p className="muted">{statusText}</p>
-
-          {API_URL && <p className="explorer-api-info">Backend: {API_URL}</p>}
         </div>
 
         <div className="explorer-top-actions">
