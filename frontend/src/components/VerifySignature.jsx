@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Magnetic from "./Magnetic";
 
 const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
@@ -140,17 +141,19 @@ export default function VerifySignature({ prefill }) {
         disabled={busy}
       />
 
-      <button
-        type="button"
-        className="primary-button"
-        onClick={verifySignature}
-        disabled={busy || !message.trim() || !signature.trim()}
-      >
-        {busy ? "Verifying..." : "Verify Signature"}
-      </button>
+      <Magnetic strength={6}>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={verifySignature}
+          disabled={busy || !message.trim() || !signature.trim()}
+        >
+          {busy ? "Verifying..." : "Verify Signature"}
+        </button>
+      </Magnetic>
 
       {result && (
-        <div className="block-card" style={{ marginTop: "18px" }}>
+        <div className="block-card entrance entrance-1" style={{ marginTop: "18px" }}>
           <div className="block-heading">
             <strong>VERIFICATION STATUS</strong>
             <span className="valid-badge">VALID</span>

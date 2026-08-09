@@ -13,6 +13,10 @@ import {
 
 import { BrowserProvider, Signature, verifyMessage } from "ethers";
 
+import CopyGlyph from "./CopyGlyph";
+import Magnetic from "./Magnetic";
+import { useToast } from "./Toast";
+
 const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
 const DEFAULT_DERIVATION_PATH = "44'/60'/0'/0/0";
@@ -93,12 +97,16 @@ function CopyButton({ value }) {
       onClick={copyValue}
       disabled={!value}
       style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "6px",
         minHeight: "36px",
         padding: "0 13px",
         fontSize: "12px",
       }}
     >
-      {copied ? "Copied" : "Copy"}
+      <CopyGlyph copied={copied} />
+      <span>{copied ? "Copied" : "Copy"}</span>
     </button>
   );
 }
@@ -120,9 +128,11 @@ function ResultCard({ label, value, monospace = true }) {
       >
         <strong
           style={{
-            color: "#94a3b8",
-            fontSize: "13px",
-            letterSpacing: "0.06em",
+            color: "var(--ink-faint)",
+            fontSize: "11px",
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
           }}
         >
           {label}
@@ -133,8 +143,8 @@ function ResultCard({ label, value, monospace = true }) {
 
       <pre
         style={{
-          color: "#f8fafc",
-          fontFamily: monospace ? '"Cascadia Code", Consolas, monospace' : "inherit",
+          color: "var(--ink)",
+          fontFamily: monospace ? "var(--font-mono)" : "inherit",
           lineHeight: "1.7",
           overflowWrap: "anywhere",
         }}
@@ -148,6 +158,7 @@ function ResultCard({ label, value, monospace = true }) {
 export default function SignMessage({ onAddedToNotebook }) {
   const { open } = useAppKit();
   const { disconnect } = useDisconnect();
+  const toast = useToast();
 
   const {
     address: walletAddress,
@@ -501,6 +512,7 @@ export default function SignMessage({ onAddedToNotebook }) {
       }
 
       setAddedBlock(data.block);
+      toast(`Entry #${data.block.index} added to your notebook`, "success");
 
       if (onAddedToNotebook) {
         onAddedToNotebook(data.block);
@@ -548,14 +560,16 @@ export default function SignMessage({ onAddedToNotebook }) {
 
         {!walletConnected && !ledgerConnected && (
           <div className="wallet-buttons">
-            <button
-              type="button"
-              className="wallet-button"
-              onClick={connectWallet}
-              disabled={busy}
-            >
-              Connect Wallet
-            </button>
+            <Magnetic strength={10}>
+              <button
+                type="button"
+                className="wallet-button"
+                onClick={connectWallet}
+                disabled={busy}
+              >
+                Connect Wallet
+              </button>
+            </Magnetic>
 
             <button
               type="button"
@@ -701,20 +715,22 @@ export default function SignMessage({ onAddedToNotebook }) {
             </span>
           </div>
 
-          <button
-            type="button"
-            className="sign-action-button"
-            onClick={signPersonalMessage}
-            disabled={busy || !sourceConnected || !message.trim()}
-          >
-            {busy
-              ? "Waiting for approval..."
-              : !sourceConnected
-                ? "Connect a wallet first"
-                : activeSource === "ledger"
-                  ? "Sign with Ledger"
-                  : "Sign with Wallet"}
-          </button>
+          <Magnetic strength={8}>
+            <button
+              type="button"
+              className="sign-action-button"
+              onClick={signPersonalMessage}
+              disabled={busy || !sourceConnected || !message.trim()}
+            >
+              {busy
+                ? "Waiting for approval..."
+                : !sourceConnected
+                  ? "Connect a wallet first"
+                  : activeSource === "ledger"
+                    ? "Sign with Ledger"
+                    : "Sign with Wallet"}
+            </button>
+          </Magnetic>
 
           <div className="signature-warning">
             Never approve an unknown message. A signature proves control of the Ethereum
@@ -724,7 +740,7 @@ export default function SignMessage({ onAddedToNotebook }) {
 
         {signedResult && !addedBlock && (
           <section
-            className="panel"
+            className="panel entrance entrance-1"
             style={{
               marginTop: "22px",
             }}

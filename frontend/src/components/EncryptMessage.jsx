@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { encrypt } from "eciesjs";
+import CopyGlyph from "./CopyGlyph";
+import Magnetic from "./Magnetic";
 
 function removeHexPrefix(value) {
   return String(value || "")
@@ -253,17 +255,19 @@ function EncryptMessage() {
           disabled={loading}
         />
 
-        <button
-          className="primary-button"
-          type="submit"
-          disabled={loading || !publicKey.trim() || !message.length}
-        >
-          {loading ? "Encrypting locally..." : "Encrypt Message Locally"}
-        </button>
+        <Magnetic strength={6}>
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={loading || !publicKey.trim() || !message.length}
+          >
+            {loading ? "Encrypting locally..." : "Encrypt Message Locally"}
+          </button>
+        </Magnetic>
       </form>
 
       {ciphertextHex && (
-        <div className="crypto-result">
+        <div className="crypto-result entrance entrance-1">
           <div className="crypto-result-header">
             <strong>Ciphertext HEX</strong>
 
@@ -274,7 +278,8 @@ function EncryptMessage() {
 
           <div className="crypto-actions">
             <button type="button" className="crypto-secondary-button" onClick={copyCiphertext}>
-              {copied ? "Copied" : "Copy Ciphertext"}
+              <CopyGlyph copied={copied} />
+              <span>{copied ? "Copied" : "Copy Ciphertext"}</span>
             </button>
 
             <button

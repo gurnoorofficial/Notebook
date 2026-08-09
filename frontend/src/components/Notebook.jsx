@@ -1,4 +1,8 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
+import CopyGlyph from "./CopyGlyph";
+import Magnetic from "./Magnetic";
+import { useCountUp, useInView } from "../hooks";
+import { useToast } from "./Toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -59,7 +63,10 @@ async function copyToClipboard(value) {
   }
 }
 
-function CopyButton({ value, defaultLabel, onError, className = "" }) {
+const CopyButton = forwardRef(function CopyButton(
+  { value, defaultLabel, onError, className = "" },
+  ref
+) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -78,23 +85,154 @@ function CopyButton({ value, defaultLabel, onError, className = "" }) {
   }
 
   return (
-    <button type="button" className={className} onClick={handleCopy} disabled={!value}>
-      {copied ? "Copied" : defaultLabel}
+    <button ref={ref} type="button" className={className} onClick={handleCopy} disabled={!value}>
+      <CopyGlyph copied={copied} />
+      <span>{copied ? "Copied" : defaultLabel}</span>
     </button>
+  );
+});
+
+function NotebookEntry({ block, onVerifyEntry, onError }) {
+  const [ref, inView] = useInView();
+
+  function createBlockJson() {
+    return JSON.stringify(block, null, 2);
+  }
+
+  return (
+    <article
+      ref={ref}
+      className={`block-card explorer-card reveal ${inView ? "is-visible" : ""}`}
+    >
+      <div className="block-heading">
+        <div>
+          <span className="block-number">Entry #{block.index}</span>
+
+          <p>{block.timestamp || "No timestamp"}</p>
+        </div>
+
+        <span className="valid-badge">Stored</span>
+      </div>
+
+      <div className="message-box explorer-message-box">
+        <strong>Message</strong>
+
+        <pre>{block.message || "No message"}</pre>
+      </div>
+
+      <div className="block-copy-actions">
+        <Magnetic strength={6}>
+          <CopyButton
+            value={block.message}
+            defaultLabel="Copy Message"
+            className="block-copy-button primary"
+            onError={onError}
+          />
+        </Magnetic>
+
+        <CopyButton
+          value={createBlockJson()}
+          defaultLabel="Copy JSON"
+          className="block-copy-button"
+          onError={onError}
+        />
+      </div>
+
+      <dl className="block-details">
+        <div className="ownership-item">
+          <dt>Ownership</dt>
+
+          <div className="ownership-row">
+            <dd className="ownership-address" title={block.eth_address || ""}>
+              {block.eth_address || "—"}
+            </dd>
+
+            <CopyButton
+              value={block.eth_address}
+              defaultLabel="Copy"
+              className="ownership-copy"
+              onError={onError}
+            />
+          </div>
+        </div>
+
+        <div className="ownership-item">
+          <dt>Signature</dt>
+
+          <div className="ownership-row">
+            <dd className="ownership-address" title={block.signature || ""}>
+              {block.signature || "—"}
+            </dd>
+
+            <CopyButton
+              value={block.signature}
+              defaultLabel="Copy"
+              className="ownership-copy"
+              onError={onError}
+            />
+          </div>
+        </div>
+
+        <div className="ownership-item">
+          <dt>Hash</dt>
+
+          <div className="ownership-row">
+            <dd className="ownership-address" title={block.hash || ""}>
+              {block.hash || "—"}
+            </dd>
+
+            <CopyButton
+              value={block.hash}
+              defaultLabel="Copy"
+              className="ownership-copy"
+              onError={onError}
+            />
+          </div>
+        </div>
+
+        <div>
+          <dt>Previous Fingerprint</dt>
+
+          <dd title={block.previous_hash || ""}>{fingerprint(block.previous_hash)}</dd>
+        </div>
+      </dl>
+
+      <div className="entry-verify-row">
+        <button
+          type="button"
+          className="ownership-copy"
+          onClick={() => onVerifyEntry && onVerifyEntry(block)}
+        >
+          Verify Signature
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function SkeletonEntry() {
+  return (
+    <div className="skeleton-card">
+      <div className="skeleton-line w-30" />
+      <div className="skeleton-line h-60" />
+      <div className="skeleton-line w-100" />
+      <div className="skeleton-line w-70 last" />
+    </div>
   );
 }
 
 export default function Notebook({ refreshKey, onVerifyEntry }) {
   const [blocks, setBlocks] = useState([]);
-  const [status, setStatus] = useState("Loading notebook...");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const toast = useToast();
+  const animatedCount = useCountUp(blocks.length, 700);
 
   async function loadBlocks() {
     try {
       setLoading(true);
       setError("");
-      setStatus("Loading notebook...");
 
       const response = await fetch(`${API_URL}/api/chain`, {
         method: "GET",
@@ -142,18 +280,12 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
       }
 
       setBlocks(loadedBlocks);
-
-      setStatus(
-        loadedBlocks.length === 1 ? "1 entry loaded" : `${loadedBlocks.length} entries loaded`
-      );
     } catch (loadError) {
       console.error("Notebook load error:", loadError);
 
       setBlocks([]);
 
       setError(loadError?.message || "Could not load notebook.");
-
-      setStatus("Failed to load notebook");
     } finally {
       setLoading(false);
     }
@@ -182,7 +314,7 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
       const downloadLink = document.createElement("a");
 
       downloadLink.href = downloadUrl;
-      downloadLink.download = "mynotebook.json";
+      downloadLink.download = "notebook.json";
       downloadLink.style.display = "none";
 
       document.body.appendChild(downloadLink);
@@ -194,21 +326,21 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
         URL.revokeObjectURL(downloadUrl);
       }, 1000);
 
-      setStatus(
-        blocks.length === 1
-          ? "1 entry loaded — mynotebook.json downloaded"
-          : `${blocks.length} entries loaded — mynotebook.json downloaded`
-      );
+      toast("notebook.json downloaded", "success");
     } catch (downloadError) {
-      setError(downloadError?.message || "Could not download mynotebook.json.");
+      setError(downloadError?.message || "Could not download notebook.json.");
     }
   }
 
-  function createBlockJson(block) {
-    return JSON.stringify(block, null, 2);
-  }
-
   const newestFirstBlocks = [...blocks].sort((blockA, blockB) => blockB.index - blockA.index);
+
+  const statusText = loading
+    ? "Loading notebook..."
+    : error
+      ? "Failed to load notebook"
+      : blocks.length === 1
+        ? "1 entry loaded"
+        : `${animatedCount} entries loaded`;
 
   useEffect(() => {
     loadBlocks();
@@ -230,11 +362,11 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
 
         .explorer-top-button {
           min-height: 46px;
-          border: 1px solid rgba(148, 163, 184, 0.2);
+          border: 1px solid var(--hairline);
           border-radius: 14px;
           padding: 0 17px;
-          background: rgba(30, 41, 59, 0.92);
-          color: #f8fafc;
+          background: var(--surface-sunken);
+          color: var(--ink);
           font-size: 14px;
           font-weight: 700;
           cursor: pointer;
@@ -249,8 +381,8 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
         }
 
         .explorer-top-button:hover {
-          border-color: rgba(56, 189, 248, 0.38);
-          background: rgba(30, 41, 59, 1);
+          border-color: var(--hairline-strong);
+          background: var(--surface-hover);
         }
 
         .explorer-top-button:active {
@@ -287,13 +419,17 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
         }
 
         .block-copy-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
           width: 100%;
           min-height: 48px;
-          border: 1px solid rgba(148, 163, 184, 0.2);
+          border: 1px solid var(--hairline);
           border-radius: 14px;
           padding: 0 14px;
-          background: rgba(15, 23, 42, 0.92);
-          color: #e2e8f0;
+          background: var(--surface-sunken);
+          color: var(--ink-dim);
           font-size: 14px;
           font-weight: 700;
           cursor: pointer;
@@ -308,8 +444,8 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
         }
 
         .block-copy-button:hover {
-          border-color: rgba(56, 189, 248, 0.36);
-          background: rgba(15, 23, 42, 1);
+          border-color: var(--hairline-strong);
+          background: var(--surface-hover);
         }
 
         .block-copy-button:active {
@@ -317,21 +453,13 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
         }
 
         .block-copy-button.primary {
-          background: linear-gradient(
-            135deg,
-            rgba(14, 116, 144, 0.98),
-            rgba(2, 132, 199, 0.98)
-          );
-          border-color: rgba(56, 189, 248, 0.46);
-          color: #ffffff;
+          background: linear-gradient(135deg, var(--accent-bright), var(--accent));
+          border-color: var(--hairline-strong);
+          color: var(--accent-ink);
         }
 
         .block-copy-button.primary:hover {
-          background: linear-gradient(
-            135deg,
-            rgba(8, 145, 178, 1),
-            rgba(2, 132, 199, 1)
-          );
+          filter: brightness(1.06);
         }
 
         .block-copy-button:disabled {
@@ -365,17 +493,27 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
           overflow-y: hidden;
           white-space: nowrap;
           text-overflow: clip;
-          padding-bottom: 2px;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .block-details dd.ownership-address::-webkit-scrollbar {
+          display: none;
+          height: 0;
         }
 
         .ownership-copy {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
           flex: 0 0 auto;
           min-height: 30px;
           padding: 0 11px;
-          border: 1px solid rgba(148, 163, 184, 0.3);
+          border: 1px solid var(--hairline);
           border-radius: 8px;
-          background: #161a28;
-          color: #f8fafc;
+          background: var(--surface-sunken);
+          color: var(--ink);
           font-size: 11px;
           font-weight: 700;
           cursor: pointer;
@@ -385,7 +523,8 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
         }
 
         .ownership-copy:hover:not(:disabled) {
-          background: #1e2636;
+          border-color: var(--hairline-strong);
+          background: var(--surface-hover);
         }
 
         .ownership-copy:disabled {
@@ -408,6 +547,11 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
           display: flex;
           justify-content: flex-end;
           margin-top: 16px;
+        }
+
+        .skeleton-stack {
+          display: grid;
+          gap: 18px;
         }
 
         @media (max-width: 640px) {
@@ -480,7 +624,7 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
 
           <h2>Notebook</h2>
 
-          <p className="muted">{status}</p>
+          <p className="muted">{statusText}</p>
 
           {API_URL && <p className="explorer-api-info">Backend: {API_URL}</p>}
         </div>
@@ -492,7 +636,7 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
             onClick={downloadBlockchain}
             disabled={loading || blocks.length === 0}
           >
-            Download mynotebook.json
+            Download notebook.json
           </button>
 
           <button
@@ -508,8 +652,23 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
 
       {error && <div className="alert explorer-error">{error}</div>}
 
+      {loading && blocks.length === 0 && (
+        <div className="skeleton-stack">
+          <SkeletonEntry />
+          <SkeletonEntry />
+        </div>
+      )}
+
       {!loading && !error && blocks.length === 0 && (
         <div className="empty-state">
+          <span className="empty-state-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 3.5h9.5A2.5 2.5 0 0 1 18 6v14.5H8A2.5 2.5 0 0 1 5.5 18V6A2.5 2.5 0 0 1 6 3.5Z" />
+              <path d="M18 20.5H8" />
+              <path d="M9 8h6M9 11.5h6M9 15h4" />
+            </svg>
+          </span>
+
           <h3>No entries yet</h3>
 
           <p>Your notebook is empty. Signed thoughts and messages will appear here.</p>
@@ -518,111 +677,12 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
 
       <div className="block-list">
         {newestFirstBlocks.map((block) => (
-          <article
-            className="block-card explorer-card"
+          <NotebookEntry
             key={block.hash || `${block.index}-${block.timestamp}`}
-          >
-            <div className="block-heading">
-              <div>
-                <span className="block-number">Entry #{block.index}</span>
-
-                <p>{block.timestamp || "No timestamp"}</p>
-              </div>
-
-              <span className="valid-badge">Stored</span>
-            </div>
-
-            <div className="message-box explorer-message-box">
-              <strong>Message</strong>
-
-              <pre>{block.message || "No message"}</pre>
-            </div>
-
-            <div className="block-copy-actions">
-              <CopyButton
-                value={block.message}
-                defaultLabel="Copy Message"
-                className="block-copy-button primary"
-                onError={setError}
-              />
-
-              <CopyButton
-                value={createBlockJson(block)}
-                defaultLabel="Copy JSON"
-                className="block-copy-button"
-                onError={setError}
-              />
-            </div>
-
-            <dl className="block-details">
-              <div className="ownership-item">
-                <dt>Ownership</dt>
-
-                <div className="ownership-row">
-                  <dd className="ownership-address" title={block.eth_address || ""}>
-                    {block.eth_address || "—"}
-                  </dd>
-
-                  <CopyButton
-                    value={block.eth_address}
-                    defaultLabel="Copy"
-                    className="ownership-copy"
-                    onError={setError}
-                  />
-                </div>
-              </div>
-
-              <div className="ownership-item">
-                <dt>Signature</dt>
-
-                <div className="ownership-row">
-                  <dd className="ownership-address" title={block.signature || ""}>
-                    {block.signature || "—"}
-                  </dd>
-
-                  <CopyButton
-                    value={block.signature}
-                    defaultLabel="Copy"
-                    className="ownership-copy"
-                    onError={setError}
-                  />
-                </div>
-              </div>
-
-              <div className="ownership-item">
-                <dt>Hash</dt>
-
-                <div className="ownership-row">
-                  <dd className="ownership-address" title={block.hash || ""}>
-                    {block.hash || "—"}
-                  </dd>
-
-                  <CopyButton
-                    value={block.hash}
-                    defaultLabel="Copy"
-                    className="ownership-copy"
-                    onError={setError}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <dt>Previous Fingerprint</dt>
-
-                <dd title={block.previous_hash || ""}>{fingerprint(block.previous_hash)}</dd>
-              </div>
-            </dl>
-
-            <div className="entry-verify-row">
-              <button
-                type="button"
-                className="ownership-copy"
-                onClick={() => onVerifyEntry && onVerifyEntry(block)}
-              >
-                Verify Signature
-              </button>
-            </div>
-          </article>
+            block={block}
+            onVerifyEntry={onVerifyEntry}
+            onError={setError}
+          />
         ))}
       </div>
     </section>
