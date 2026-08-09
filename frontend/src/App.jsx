@@ -104,6 +104,8 @@ function App() {
   const [notebookRefreshKey, setNotebookRefreshKey] = useState(0);
   const [verifyPrefill, setVerifyPrefill] = useState(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+  const [entranceDone, setEntranceDone] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const navRef = useRef(null);
   const tabRefs = useRef({});
@@ -111,6 +113,19 @@ function App() {
 
   useSpotlight();
   useParallax();
+
+  useEffect(() => {
+    // The entrance animation leaves a `transform` on these elements while it
+    // runs (even the resting `none` keyframe briefly holds during fill-mode).
+    // A lingering transform turns the element into a containing block for
+    // fixed-position descendants and can trip WebKit compositing quirks, so
+    // drop the classes entirely once the animation has had time to finish.
+    const timer = window.setTimeout(() => setEntranceDone(true), 850);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const entranceClass = (variant) => (entranceDone ? "" : `entrance ${variant}`);
 
   function changeTab(tabName) {
     if (tabName === activeTab) {
@@ -132,6 +147,26 @@ function App() {
 
     changeTab("verify-signature");
   }
+
+  useEffect(() => {
+    if (!drawerOpen) {
+      return undefined;
+    }
+
+    function handleKeydown(event) {
+      if (event.key === "Escape") {
+        setDrawerOpen(false);
+      }
+    }
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeydown);
+
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeydown);
+    };
+  }, [drawerOpen]);
 
   useLayoutEffect(() => {
     function measure() {
@@ -161,9 +196,85 @@ function App() {
     };
   }, [activeTab]);
 
+  const activeTabLabel = TABS.find((tab) => tab.id === activeTab)?.label || "Notebook";
+
   return (
     <div className="shell">
-      <header className="app-header entrance entrance-1">
+      <div className="mobile-topbar">
+        <button
+          type="button"
+          className="mobile-menu-button"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Open menu"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+
+        <span className="mobile-topbar-title">{activeTabLabel}</span>
+
+        <span className="mobile-topbar-status" aria-label="Backend connected" title="Backend connected">
+          <span />
+        </span>
+      </div>
+
+      {drawerOpen && (
+        <div className="mobile-drawer-overlay" onClick={() => setDrawerOpen(false)}>
+          <div
+            className="mobile-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mobile-drawer-head">
+              <div>
+                <p className="eyebrow">Proof Ledger &middot; Ethereum</p>
+                <h1 className="brand-title">Notebook</h1>
+              </div>
+
+              <button
+                type="button"
+                className="mobile-drawer-close"
+                onClick={() => setDrawerOpen(false)}
+                aria-label="Close menu"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M6 6l12 12M18 6 6 18" />
+                </svg>
+              </button>
+            </div>
+
+            <nav className="mobile-drawer-nav">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={activeTab === tab.id ? "active" : ""}
+                  onClick={() => {
+                    changeTab(tab.id);
+                    setDrawerOpen(false);
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+
+            <div className="mobile-drawer-foot">
+              <ThemeControls />
+
+              <div className="app-status">
+                <span />
+                Backend connected
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <header className={`app-header ${entranceClass("entrance-1")}`}>
         <div>
           <p className="eyebrow">Proof Ledger &middot; Ethereum</p>
           <h1 className="brand-title">Notebook</h1>
@@ -180,7 +291,7 @@ function App() {
         </div>
       </header>
 
-      <nav className="navigation entrance entrance-2" ref={navRef}>
+      <nav className={`navigation ${entranceClass("entrance-2")}`} ref={navRef}>
         <span
           className="nav-indicator"
           style={{
@@ -205,7 +316,7 @@ function App() {
         ))}
       </nav>
 
-      <main className="app-content entrance entrance-3">
+      <main className={`app-content ${entranceClass("entrance-3")}`}>
         {activeTab === "notebook" && (
           <Notebook refreshKey={notebookRefreshKey} onVerifyEntry={verifyEntry} />
         )}

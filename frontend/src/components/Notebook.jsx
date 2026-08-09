@@ -430,6 +430,10 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
         }
 
         .explorer-top-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
           min-height: 46px;
           border: 1px solid var(--hairline);
           border-radius: 14px;
@@ -447,6 +451,12 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
             border-color 0.15s ease,
             background 0.15s ease,
             opacity 0.15s ease;
+        }
+
+        .explorer-top-button svg {
+          flex: 0 0 auto;
+          width: 16px;
+          height: 16px;
         }
 
         .explorer-top-button:hover {
@@ -701,6 +711,7 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
 
         .search-row input:focus {
           border-color: var(--accent);
+          box-shadow: 0 0 0 3px rgba(128, 128, 128, 0.16);
           box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
         }
 
@@ -772,12 +783,14 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
 
         .chain-connector.valid .chain-link {
           border-color: var(--success);
+          box-shadow: 0 0 7px rgba(154, 181, 119, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.15);
           box-shadow: 0 0 7px color-mix(in srgb, var(--success) 55%, transparent),
             inset 0 1px 1px rgba(255, 255, 255, 0.15);
         }
 
         .chain-connector.broken .chain-link {
           border-color: var(--danger);
+          box-shadow: 0 0 7px rgba(226, 104, 95, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.15);
           box-shadow: 0 0 7px color-mix(in srgb, var(--danger) 55%, transparent),
             inset 0 1px 1px rgba(255, 255, 255, 0.15);
         }
@@ -831,34 +844,68 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
           }
           .explorer-panel .section-header {
             display: flex;
-            flex-direction: column;
-            align-items: stretch;
-            gap: 16px;
+            flex-direction: row;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
           }
 
           .explorer-top-actions {
-            display: grid;
-            grid-template-columns: 1fr;
-            width: 100%;
+            flex: 0 0 auto;
+            gap: 6px;
           }
 
           .explorer-top-button {
-            width: 100%;
-            min-height: 50px;
-            border-radius: 15px;
+            width: 34px;
+            min-height: 34px;
+            padding: 0;
+            border-radius: 10px;
+          }
+
+          .explorer-top-button-label {
+            display: none;
+          }
+
+          .explorer-top-button svg {
+            width: 15px;
+            height: 15px;
           }
 
           .explorer-card {
-            border-radius: 18px;
+            border-radius: 16px;
+            padding: 16px;
           }
 
           .explorer-card .block-heading {
-            align-items: flex-start;
-            gap: 12px;
+            align-items: center;
+            gap: 10px;
+          }
+
+          .explorer-card .block-heading-id {
+            gap: 8px;
+          }
+
+          .explorer-card .blocky-avatar,
+          .explorer-card .blocky-placeholder {
+            width: 24px !important;
+            height: 24px !important;
+            padding: 3px;
           }
 
           .explorer-card .block-heading p {
             overflow-wrap: anywhere;
+          }
+
+          .search-row {
+            margin-bottom: 14px;
+          }
+
+          .search-row input {
+            min-height: 42px;
+          }
+
+          .explorer-message-box {
+            margin-top: 2px;
           }
 
           .block-copy-actions {
@@ -906,8 +953,14 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
             className="explorer-top-button"
             onClick={downloadBlockchain}
             disabled={loading || blocks.length === 0}
+            aria-label="Download notebook.json"
+            title="Download notebook.json"
           >
-            Download notebook.json
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5" />
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+            <span className="explorer-top-button-label">Download notebook.json</span>
           </button>
 
           <button
@@ -915,8 +968,14 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
             className="explorer-top-button"
             onClick={loadBlocks}
             disabled={loading}
+            aria-label={loading ? "Loading" : "Refresh"}
+            title={loading ? "Loading" : "Refresh"}
           >
-            {loading ? "Loading..." : "Refresh"}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3.5 12a8.5 8.5 0 0 1 14.5-6M20.5 12a8.5 8.5 0 0 1-14.5 6" />
+              <path d="M18 4v4h-4M6 20v-4h4" />
+            </svg>
+            <span className="explorer-top-button-label">{loading ? "Loading..." : "Refresh"}</span>
           </button>
         </div>
       </div>

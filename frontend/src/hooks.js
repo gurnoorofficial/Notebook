@@ -69,17 +69,34 @@ export function useInView(options) {
       return undefined;
     }
 
+    let settled = false;
+
+    function reveal() {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      setInView(true);
+      observer.unobserve(node);
+    }
+
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
-        setInView(true);
-        observer.unobserve(node);
+        reveal();
       }
     }, options || { threshold: 0.15, rootMargin: "0px 0px -40px 0px" });
 
     observer.observe(node);
 
+    // Safety net: some WebKit builds miss intersection callbacks for
+    // elements inside transformed/filtered ancestors. Never let content
+    // stay invisible because of an observer quirk.
+    const fallbackTimer = window.setTimeout(reveal, 1200);
+
     return () => {
       observer.disconnect();
+      window.clearTimeout(fallbackTimer);
     };
   }, [reducedMotion, options]);
 
