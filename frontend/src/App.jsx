@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import About from "./components/About";
 import Notebook from "./components/Notebook";
 import SignMessage from "./components/SignMessage";
 import EncryptMessage from "./components/EncryptMessage";
@@ -15,6 +16,7 @@ import "./App.css";
 const TAB_STORAGE_KEY = "mynotebook-active-tab";
 
 const TABS = [
+  { id: "about", label: "About" },
   { id: "notebook", label: "Notebook" },
   { id: "sign", label: "Sign a Msg" },
   { id: "encrypt", label: "Encrypt" },
@@ -27,7 +29,7 @@ function getInitialTab() {
 
   const allowedTabs = TABS.map((tab) => tab.id);
 
-  return allowedTabs.includes(savedTab) ? savedTab : "notebook";
+  return allowedTabs.includes(savedTab) ? savedTab : "about";
 }
 
 function useSpotlight() {
@@ -317,6 +319,8 @@ function App() {
       </nav>
 
       <main className={`app-content ${entranceClass("entrance-3")}`}>
+        {activeTab === "about" && <About />}
+
         {activeTab === "notebook" && (
           <Notebook refreshKey={notebookRefreshKey} onVerifyEntry={verifyEntry} />
         )}
