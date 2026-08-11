@@ -87,7 +87,9 @@ def read_json_input() -> str:
 def verify_block(block: dict, label: str) -> bool:
     expected_hash = str(block.get("hash", "")).strip()
     actual_hash = calculate_block_hash(block)
-    matched = expected_hash.lower() == actual_hash.lower()
+
+    expected_hash_normalized = expected_hash[2:] if expected_hash[:2].lower() == "0x" else expected_hash
+    matched = expected_hash_normalized.lower() == actual_hash.lower()
 
     print(f"\n{label}")
     print(f"  Expected hash: {expected_hash or '(missing)'}")

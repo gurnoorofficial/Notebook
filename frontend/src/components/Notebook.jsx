@@ -12,6 +12,18 @@ const API_URL = import.meta.env.VITE_API_URL || "";
 
 const PAGE_SIZE = 24;
 
+function getSignatureValue(signature) {
+  if (typeof signature === "string") {
+    return signature;
+  }
+
+  if (signature && typeof signature === "object" && typeof signature.value === "string") {
+    return signature.value;
+  }
+
+  return "";
+}
+
 async function copyToClipboard(value) {
   const text = String(value ?? "");
 
@@ -186,14 +198,14 @@ function NotebookEntry({ block, chainInfo, onVerifyEntry, onError }) {
           <dt>Signature</dt>
 
           <div className="ownership-row">
-            <dd className="ownership-address" title={block.signature || ""}>
-              {block.signature || "—"}
+            <dd className="ownership-address" title={getSignatureValue(block.signature)}>
+              {getSignatureValue(block.signature) || "—"}
             </dd>
 
-            <QrReveal value={block.signature} />
+            <QrReveal value={getSignatureValue(block.signature)} />
 
             <CopyButton
-              value={block.signature}
+              value={getSignatureValue(block.signature)}
               defaultLabel="Copy"
               className="ownership-copy"
               onError={onError}

@@ -142,9 +142,14 @@ function App() {
   }
 
   function verifyEntry(block) {
+    const signatureValue =
+      typeof block.signature === "string"
+        ? block.signature
+        : block.signature?.value || "";
+
     setVerifyPrefill({
       message: block.message || "",
-      signature: block.signature || "",
+      signature: signatureValue,
     });
 
     changeTab("verify-signature");

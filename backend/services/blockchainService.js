@@ -9,7 +9,35 @@ const {
   writeFingerprint,
 } = require("../utils/blockchainStore");
 
+const { buildMerkleRoot } = require("./merkleTree");
+
+const CURRENT_SCHEMA_VERSION = "2.0";
+
 const GENESIS_PREVIOUS_HASH = "0".repeat(64);
+
+function stripHexPrefix(value) {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  return value.startsWith("0x") || value.startsWith("0X") ? value.slice(2) : value;
+}
+
+function withHexPrefix(value) {
+  return "0x" + stripHexPrefix(value);
+}
+
+function extractSignatureValue(signature) {
+  if (typeof signature === "string") {
+    return signature;
+  }
+
+  if (signature && typeof signature === "object" && typeof signature.value === "string") {
+    return signature.value;
+  }
+
+  return null;
+}
 
 function normalizeMessage(message) {
   if (typeof message !== "string") {
@@ -148,9 +176,11 @@ function verifyStoredFingerprint(blockchain) {
 }
 
 function verifyBlockSignature(block) {
+  const signatureValue = extractSignatureValue(block.signature);
+
   if (
     typeof block.message !== "string" ||
-    typeof block.signature !== "string" ||
+    typeof signatureValue !== "string" ||
     typeof block.eth_address !== "string"
   ) {
     return {
@@ -160,7 +190,7 @@ function verifyBlockSignature(block) {
   }
 
   try {
-    const recoveredAddress = verifyMessage(block.message, block.signature);
+    const recoveredAddress = verifyMessage(block.message, signatureValue);
 
     const valid = recoveredAddress.toLowerCase() === block.eth_address.toLowerCase();
 
@@ -206,16 +236,19 @@ function validateChain(blockchain, options = {}) {
     }
 
     const expectedPreviousHash =
-      index === 0 ? GENESIS_PREVIOUS_HASH : blockchain.chain[index - 1].hash;
+      index === 0 ? GENESIS_PREVIOUS_HASH : stripHexPrefix(blockchain.chain[index - 1].hash);
 
-    if (block.previous_hash !== expectedPreviousHash) {
+    const previousHashMatches = stripHexPrefix(block.previous_hash) === expectedPreviousHash;
+
+    if (!previousHashMatches) {
       valid = false;
       messages.push(`Block #${index}: previous hash does not match.`);
     }
 
     const expectedCurrentHash = calculateBlockHash(block);
+    const currentHashMatches = stripHexPrefix(block.hash) === expectedCurrentHash;
 
-    if (block.hash !== expectedCurrentHash) {
+    if (!currentHashMatches) {
       valid = false;
       messages.push(`Block #${index}: current hash is invalid.`);
     }
@@ -227,11 +260,28 @@ function validateChain(blockchain, options = {}) {
       messages.push(`Block #${index}: ${signatureResult.error}`);
     }
 
+    let merkleRootValid = true;
+
+    if (typeof block.merkle_root === "string") {
+      const priorHashes = blockchain.chain
+        .slice(0, index)
+        .map((priorBlock) => stripHexPrefix(priorBlock.hash));
+      const expectedMerkleRoot = buildMerkleRoot(priorHashes);
+
+      merkleRootValid = stripHexPrefix(block.merkle_root) === expectedMerkleRoot;
+
+      if (!merkleRootValid) {
+        valid = false;
+        messages.push(`Block #${index}: merkle_root does not match the blocks before it.`);
+      }
+    }
+
     if (
       block.index === index &&
-      block.previous_hash === expectedPreviousHash &&
-      block.hash === expectedCurrentHash &&
-      signatureResult.valid
+      previousHashMatches &&
+      currentHashMatches &&
+      signatureResult.valid &&
+      merkleRootValid
     ) {
       messages.push(`Block #${index}: valid.`);
     }
@@ -271,7 +321,7 @@ function loadVerifiedBlockchain() {
 }
 
 function currentTimestamp() {
-  return new Date().toISOString().slice(0, 19);
+  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 async function addBlock({ message, signature }) {
@@ -300,18 +350,28 @@ async function addBlock({ message, signature }) {
   const previousHash =
     blockchain.chain.length === 0
       ? GENESIS_PREVIOUS_HASH
-      : blockchain.chain[blockchain.chain.length - 1].hash;
+      : stripHexPrefix(blockchain.chain[blockchain.chain.length - 1].hash);
+
+  const merkleRoot = buildMerkleRoot(
+    blockchain.chain.map((block) => stripHexPrefix(block.hash))
+  );
 
   const newBlock = {
+    schema_version: CURRENT_SCHEMA_VERSION,
     index: blockchain.chain.length,
-    previous_hash: previousHash,
+    previous_hash: withHexPrefix(previousHash),
+    merkle_root: merkleRoot === null ? null : withHexPrefix(merkleRoot),
     message: normalizedMessage,
+    message_encoding: "utf-8",
     eth_address: recoveredAddress.toLowerCase(),
-    signature: normalizedSignature,
+    signature: {
+      scheme: "secp256k1",
+      value: normalizedSignature,
+    },
     timestamp: currentTimestamp(),
   };
 
-  newBlock.hash = calculateBlockHash(newBlock);
+  newBlock.hash = withHexPrefix(calculateBlockHash(newBlock));
 
   blockchain.chain.push(newBlock);
 

@@ -2,6 +2,26 @@ import { keccak256, toUtf8Bytes, verifyMessage } from "ethers";
 
 const GENESIS_PREVIOUS_HASH = "0".repeat(64);
 
+function stripHexPrefix(value) {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  return value.startsWith("0x") || value.startsWith("0X") ? value.slice(2) : value;
+}
+
+function extractSignatureValue(signature) {
+  if (typeof signature === "string") {
+    return signature;
+  }
+
+  if (signature && typeof signature === "object" && typeof signature.value === "string") {
+    return signature.value;
+  }
+
+  return null;
+}
+
 function sortJsonValue(value) {
   if (Array.isArray(value)) {
     return value.map(sortJsonValue);
@@ -48,7 +68,7 @@ function canonicalJson(value) {
   return escapeNonAsciiCharacters(compactJson);
 }
 
-function calculateBlockHash(block) {
+export function calculateBlockHash(block) {
   const blockData = { ...block };
 
   delete blockData.hash;
@@ -59,16 +79,18 @@ function calculateBlockHash(block) {
 }
 
 function verifyBlockSignature(block) {
+  const signatureValue = extractSignatureValue(block.signature);
+
   if (
     typeof block.message !== "string" ||
-    typeof block.signature !== "string" ||
+    typeof signatureValue !== "string" ||
     typeof block.eth_address !== "string"
   ) {
     return { valid: false };
   }
 
   try {
-    const recoveredAddress = verifyMessage(block.message, block.signature);
+    const recoveredAddress = verifyMessage(block.message, signatureValue);
 
     return { valid: recoveredAddress.toLowerCase() === block.eth_address.toLowerCase() };
   } catch {
@@ -88,10 +110,11 @@ export function verifyChain(blocks) {
 
   for (let i = 0; i < sorted.length; i += 1) {
     const block = sorted[i];
-    const expectedPreviousHash = i === 0 ? GENESIS_PREVIOUS_HASH : sorted[i - 1].hash;
+    const expectedPreviousHash =
+      i === 0 ? GENESIS_PREVIOUS_HASH : stripHexPrefix(sorted[i - 1].hash);
 
-    const linkValid = block.previous_hash === expectedPreviousHash;
-    const hashValid = block.hash === calculateBlockHash(block);
+    const linkValid = stripHexPrefix(block.previous_hash) === expectedPreviousHash;
+    const hashValid = stripHexPrefix(block.hash) === calculateBlockHash(block);
     const signatureValid = verifyBlockSignature(block).valid;
 
     results.set(block.index, {
