@@ -44,20 +44,20 @@ Requires `pycryptodome`.
 
 ### Backend (`backend/`, Express, port 3001)
 
-- `server.js` — app setup, CORS, JSON body limit (1mb), mounts routes at `/api`, generic 404/error handlers.
+- `server.js` — app setup, CORS, JSON body limit (10mb, to allow importing a full chain export), mounts routes at `/api`, generic 404/error handlers.
 - `routes/blockchain.js` — the only route file. Endpoints:
   - `GET /api/status` — liveness check
   - `GET /api/chain` — returns the full verified chain (throws/500s if integrity check fails)
   - `POST /api/add-block` — body `{ message, signature }`; recovers the signer address from the signature, appends a new block
+  - `POST /api/import-chain` — body `{ chain: [...] }` (or a bare array); validates the whole chain (hashes, links, signatures) and, if valid, replaces `data/blockchain.json` wholesale. Used by the Notebook page's "Import" button to restore/continue from an exported `blockchain.json`.
   - `POST /api/verify-signature` — body `{ message, signature }`; recovers and returns the signing address + public key
 - `services/blockchainService.js` — the core chain logic:
   - Canonicalizes a block to JSON for hashing: recursively sort object keys, compact `JSON.stringify`, escape all non-ASCII to `\uXXXX`, then `keccak256`. This exact canonicalization is duplicated in two other places and **must stay byte-for-byte identical** across all three:
     - `frontend/src/chainVerify.js` (client-side re-verification)
     - `hash/hashverify.py` (offline Python verification)
   - Each block: `{ index, previous_hash, message, eth_address, signature, timestamp, hash }`. `previous_hash` of block 0 is 64 zeros. `hash` is `keccak256(canonicalJson(block without .hash))`.
-  - `validateChain()` re-derives every block's hash, previous-hash linkage, and ECDSA signature (via `ethers.verifyMessage`, recovered address must equal stored `eth_address`) — run on every read and after every append.
-  - A separate **fingerprint** file (`data/chain_fingerprint.txt`) stores the latest block's hash outside of `blockchain.json`. On load, if the chain's latest hash doesn't match the stored fingerprint, the chain is rejected as tampered/rolled-back — this catches an attacker replacing `blockchain.json` wholesale with a self-consistent but different chain.
-- `utils/blockchainStore.js` — plain-file persistence (`data/blockchain.json`, `data/chain_fingerprint.txt`) using write-to-`.tmp`-then-`rename` for atomic writes.
+  - `validateChain()` re-derives every block's hash, previous-hash linkage, and ECDSA signature (via `ethers.verifyMessage`, recovered address must equal stored `eth_address`) — run on every read, after every append, and on import. There is no separate fingerprint/tamper-evidence file outside `blockchain.json` — the chain's own hash-links and signatures are the only integrity check, so wholesale-replacing `blockchain.json` with another internally-consistent chain (e.g. via `/api/import-chain`) is accepted by design; that's what "Import" is for.
+- `utils/blockchainStore.js` — plain-file persistence (`data/blockchain.json`) using write-to-`.tmp`-then-`rename` for atomic writes.
 
 The backend never sees a private key — only a `(message, signature)` pair — and the
 Express layer contains no auth; anyone who can reach `POST /api/add-block` can append a
@@ -71,7 +71,7 @@ block signed by whatever address the signature recovers to.
 - `src/chainVerify.js` — client-side mirror of the backend's `calculateBlockHash`/`validateChain` logic, used by `Notebook.jsx` to badge each entry "✓ Verified" / "⚠ Broken" independent of what the backend claims.
 - `src/components/SignMessage.jsx` — the signing flow: connect via AppKit (WalletConnect) or directly via Ledger WebHID (`@ledgerhq/hw-transport-webhid` + `@ledgerhq/hw-app-eth`), sign, locally re-verify the recovered address, then optionally POST to `/api/add-block`. Ledger WebHID only works on desktop Chrome/Edge.
 - `src/components/EncryptMessage.jsx` / `DecryptMessage.jsx` — ECIES (`eciesjs`) over secp256k1, entirely client-side; explicitly never call the backend. Keep it that way if touching these files — it's a stated security property, not an oversight.
-- `src/components/Notebook.jsx` — fetches `/api/chain`, renders entries newest-first with search/pagination, per-entry chain-link visualization (valid/broken), QR reveal and copy actions for address/signature/hash, and "notebook.json" export.
+- `src/components/Notebook.jsx` — fetches `/api/chain`, renders entries newest-first with search/pagination, per-entry chain-link visualization (valid/broken), QR reveal and copy actions for address/signature/hash, an "Export" button (downloads `blockchain.json`), and an "Import" button (file picker → POSTs the picked file to `/api/import-chain`, replacing the server's chain wholesale after confirmation).
 - `src/components/VerifySignature.jsx` — standalone signature verification against `/api/verify-signature`; can be prefilled by clicking "Verify Signature" on a `Notebook` entry.
 - `src/theme.jsx` — theme context (dark/light mode + accent color), persisted via `useLocalStorage` (from `src/hooks.js`), applied as `data-theme`/`data-accent` attributes on `<html>`.
 - `src/blockies.js` — deterministic per-address/per-block dot-matrix avatar generator (canvas-based, seeded PRNG).

@@ -5,7 +5,6 @@ const path = require("path");
 
 const dataDirectory = path.join(__dirname, "..", "data");
 const blockchainPath = path.join(dataDirectory, "blockchain.json");
-const fingerprintPath = path.join(dataDirectory, "chain_fingerprint.txt");
 
 function createEmptyBlockchain() {
   return {
@@ -83,48 +82,8 @@ function writeBlockchain(blockchain) {
   fs.renameSync(temporaryPath, blockchainPath);
 }
 
-function readFingerprint() {
-  ensureDataDirectory();
-
-  if (!fs.existsSync(fingerprintPath)) {
-    return null;
-  }
-
-  const fingerprint = fs.readFileSync(fingerprintPath, "utf8").trim();
-
-  return fingerprint || null;
-}
-
-function writeFingerprint(fingerprint) {
-  if (typeof fingerprint !== "string" || !fingerprint.trim()) {
-    throw new Error("Cannot save an empty chain fingerprint.");
-  }
-
-  ensureDataDirectory();
-
-  const temporaryPath = `${fingerprintPath}.tmp`;
-
-  fs.writeFileSync(
-    temporaryPath,
-    fingerprint.trim().toLowerCase(),
-    "utf8"
-  );
-
-  fs.renameSync(temporaryPath, fingerprintPath);
-}
-
-function deleteFingerprint() {
-  if (fs.existsSync(fingerprintPath)) {
-    fs.unlinkSync(fingerprintPath);
-  }
-}
-
 module.exports = {
   blockchainPath,
-  fingerprintPath,
   readBlockchain,
   writeBlockchain,
-  readFingerprint,
-  writeFingerprint,
-  deleteFingerprint,
 };

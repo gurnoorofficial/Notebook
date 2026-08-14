@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import CopyGlyph from "./CopyGlyph";
 import Magnetic from "./Magnetic";
 import Blocky from "./Blocky";
@@ -291,9 +291,12 @@ function matchesQuery(block, query) {
 export default function Notebook({ refreshKey, onVerifyEntry }) {
   const [blocks, setBlocks] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const importInputRef = useRef(null);
 
   const toast = useToast();
   const { start: startLoadingBar, done: finishLoadingBar } = useLoadingBar();
@@ -365,12 +368,12 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
     }
   }
 
-  function downloadBlockchain() {
+  function exportBlockchain() {
     try {
       setError("");
 
       if (blocks.length === 0) {
-        throw new Error("Notebook is empty. There is nothing to download.");
+        throw new Error("Notebook is empty. There is nothing to export.");
       }
 
       const blockchainData = {
@@ -388,7 +391,7 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
       const downloadLink = document.createElement("a");
 
       downloadLink.href = downloadUrl;
-      downloadLink.download = "notebook.json";
+      downloadLink.download = "blockchain.json";
       downloadLink.style.display = "none";
 
       document.body.appendChild(downloadLink);
@@ -400,9 +403,83 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
         URL.revokeObjectURL(downloadUrl);
       }, 1000);
 
-      toast("notebook.json downloaded", "success");
-    } catch (downloadError) {
-      setError(downloadError?.message || "Could not download notebook.json.");
+      toast("blockchain.json exported", "success");
+    } catch (exportError) {
+      setError(exportError?.message || "Could not export blockchain.json.");
+    }
+  }
+
+  function triggerImport() {
+    setError("");
+    importInputRef.current?.click();
+  }
+
+  async function handleImportFile(event) {
+    const file = event.target.files?.[0];
+
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      setError("");
+
+      const fileText = await file.text();
+
+      let parsedChain;
+
+      try {
+        parsedChain = JSON.parse(fileText);
+      } catch {
+        throw new Error("That file is not valid JSON.");
+      }
+
+      const incomingBlockCount = Array.isArray(parsedChain)
+        ? parsedChain.length
+        : Array.isArray(parsedChain?.chain)
+          ? parsedChain.chain.length
+          : null;
+
+      if (incomingBlockCount === null) {
+        throw new Error('Invalid blockchain format. Expected { "chain": [] }.');
+      }
+
+      const confirmed = window.confirm(
+        `Import this file and replace the current notebook (${blocks.length} entries) with ${incomingBlockCount} entries? This cannot be undone.`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setImporting(true);
+      startLoadingBar();
+
+      const response = await fetch(`${API_URL}/api/import-chain`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: fileText,
+      });
+
+      const responseData = await response.json().catch(() => null);
+
+      if (!response.ok || !responseData?.success) {
+        throw new Error(responseData?.error || `Import failed with HTTP ${response.status}.`);
+      }
+
+      toast("Notebook imported", "success");
+
+      await loadBlocks();
+    } catch (importError) {
+      setError(importError?.message || "Could not import notebook.");
+    } finally {
+      setImporting(false);
+      finishLoadingBar();
     }
   }
 
@@ -954,23 +1031,46 @@ export default function Notebook({ refreshKey, onVerifyEntry }) {
           <button
             type="button"
             className="explorer-top-button"
-            onClick={downloadBlockchain}
-            disabled={loading || blocks.length === 0}
-            aria-label="Download notebook.json"
-            title="Download notebook.json"
+            onClick={exportBlockchain}
+            disabled={loading || importing || blocks.length === 0}
+            aria-label="Export blockchain.json"
+            title="Export blockchain.json"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5" />
               <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
             </svg>
-            <span className="explorer-top-button-label">Download notebook.json</span>
+            <span className="explorer-top-button-label">Export</span>
           </button>
 
           <button
             type="button"
             className="explorer-top-button"
+            onClick={triggerImport}
+            disabled={loading || importing}
+            aria-label={importing ? "Importing" : "Import blockchain.json"}
+            title={importing ? "Importing..." : "Import blockchain.json"}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 15V3m0 0-4.5 4.5M12 3l4.5 4.5" />
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+            <span className="explorer-top-button-label">{importing ? "Importing..." : "Import"}</span>
+          </button>
+
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={handleImportFile}
+            style={{ display: "none" }}
+          />
+
+          <button
+            type="button"
+            className="explorer-top-button"
             onClick={loadBlocks}
-            disabled={loading}
+            disabled={loading || importing}
             aria-label={loading ? "Loading" : "Refresh"}
             title={loading ? "Loading" : "Refresh"}
           >

@@ -183,10 +183,9 @@ export default function About() {
         </StepCard>
 
         <StepCard number="03" title="The chain — no page can be torn out">
-          Each block also stores the previous block's hash, and the latest hash is separately
-          fingerprinted outside the main file. Remove, reorder, or swap out any block — even one
-          in the middle — and every hash after it stops matching, exposing the tampering
-          immediately instead of hiding it.
+          Each block also stores the previous block's hash. Remove, reorder, or swap out any
+          block — even one in the middle — and every hash after it stops matching, exposing the
+          tampering immediately instead of hiding it.
         </StepCard>
 
         <StepCard number="04" title="Timestamp proof — it existed when it says it did">

@@ -2,12 +2,7 @@
 
 const { verifyMessage, keccak256, toUtf8Bytes } = require("ethers");
 
-const {
-  readBlockchain,
-  writeBlockchain,
-  readFingerprint,
-  writeFingerprint,
-} = require("../utils/blockchainStore");
+const { readBlockchain, writeBlockchain } = require("../utils/blockchainStore");
 
 const { buildMerkleRoot } = require("./merkleTree");
 
@@ -114,67 +109,6 @@ function calculateBlockHash(block) {
   return keccak256(toUtf8Bytes(canonicalBlock)).slice(2);
 }
 
-function getLatestStoredHash(blockchain) {
-  if (!blockchain || !Array.isArray(blockchain.chain) || blockchain.chain.length === 0) {
-    return null;
-  }
-
-  const latestBlock = blockchain.chain[blockchain.chain.length - 1];
-
-  if (!latestBlock || typeof latestBlock.hash !== "string" || !latestBlock.hash.trim()) {
-    return null;
-  }
-
-  return latestBlock.hash.trim().toLowerCase();
-}
-
-function verifyStoredFingerprint(blockchain) {
-  if (blockchain.chain.length === 0) {
-    return {
-      valid: true,
-      created: false,
-      fingerprint: null,
-    };
-  }
-
-  const currentFingerprint = getLatestStoredHash(blockchain);
-
-  if (!currentFingerprint) {
-    return {
-      valid: false,
-      created: false,
-      error: "Latest block hash is missing.",
-    };
-  }
-
-  const storedFingerprint = readFingerprint();
-
-  if (!storedFingerprint) {
-    writeFingerprint(currentFingerprint);
-
-    return {
-      valid: true,
-      created: true,
-      fingerprint: currentFingerprint,
-    };
-  }
-
-  if (storedFingerprint.toLowerCase() !== currentFingerprint.toLowerCase()) {
-    return {
-      valid: false,
-      created: false,
-      storedFingerprint,
-      currentFingerprint,
-    };
-  }
-
-  return {
-    valid: true,
-    created: false,
-    fingerprint: currentFingerprint,
-  };
-}
-
 function verifyBlockSignature(block) {
   const signatureValue = extractSignatureValue(block.signature);
 
@@ -207,9 +141,7 @@ function verifyBlockSignature(block) {
   }
 }
 
-function validateChain(blockchain, options = {}) {
-  const { checkFingerprint = true } = options;
-
+function validateChain(blockchain) {
   if (!blockchain || !Array.isArray(blockchain.chain)) {
     return {
       valid: false,
@@ -287,21 +219,6 @@ function validateChain(blockchain, options = {}) {
     }
   }
 
-  if (valid && checkFingerprint) {
-    const fingerprintResult = verifyStoredFingerprint(blockchain);
-
-    if (!fingerprintResult.valid) {
-      valid = false;
-      messages.push(
-        "Chain fingerprint mismatch. The notebook file may have been replaced, rolled back or modified."
-      );
-    } else if (fingerprintResult.created) {
-      messages.push("Chain fingerprint created from latest block Keccak-256 hash.");
-    } else if (blockchain.chain.length > 0) {
-      messages.push("Chain fingerprint matches latest block hash.");
-    }
-  }
-
   return {
     valid,
     totalBlocks: blockchain.chain.length,
@@ -375,9 +292,7 @@ async function addBlock({ message, signature }) {
 
   blockchain.chain.push(newBlock);
 
-  const validation = validateChain(blockchain, {
-    checkFingerprint: false,
-  });
+  const validation = validateChain(blockchain);
 
   if (!validation.valid) {
     throw new Error(`New block validation failed: ${validation.messages.join(" ")}`);
@@ -385,14 +300,29 @@ async function addBlock({ message, signature }) {
 
   writeBlockchain(blockchain);
 
-  // Fingerprint is exactly the latest block's Keccak-256 hash.
-  writeFingerprint(newBlock.hash);
-
   return newBlock;
 }
 
 function getChain() {
   return loadVerifiedBlockchain();
+}
+
+function importChain(payload) {
+  const blockchain = Array.isArray(payload) ? { chain: payload } : payload;
+
+  if (!blockchain || !Array.isArray(blockchain.chain)) {
+    throw new Error('Invalid blockchain format. Expected { "chain": [] }.');
+  }
+
+  const validation = validateChain(blockchain);
+
+  if (!validation.valid) {
+    throw new Error(`Cannot import: ${validation.messages.join(" ")}`);
+  }
+
+  writeBlockchain(blockchain);
+
+  return blockchain;
 }
 
 module.exports = {
@@ -404,4 +334,5 @@ module.exports = {
   loadVerifiedBlockchain,
   addBlock,
   getChain,
+  importChain,
 };

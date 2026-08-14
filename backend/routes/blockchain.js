@@ -3,7 +3,7 @@
 const express = require("express");
 const { verifyMessage, hashMessage, SigningKey } = require("ethers");
 
-const { addBlock, getChain } = require("../services/blockchainService");
+const { addBlock, getChain, importChain } = require("../services/blockchainService");
 
 const router = express.Router();
 
@@ -47,6 +47,23 @@ router.post("/add-block", async (request, response) => {
       error.message === "Invalid Ethereum signature.";
 
     return response.status(isClientError ? 400 : 500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+router.post("/import-chain", (request, response) => {
+  try {
+    const blockchain = importChain(request.body);
+
+    return response.json({
+      success: true,
+      message: "Notebook imported successfully.",
+      totalBlocks: blockchain.chain.length,
+    });
+  } catch (error) {
+    return response.status(400).json({
       success: false,
       error: error.message,
     });
