@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "postinstall": "npm --prefix backend install && npm --prefix frontend install",
-    "all": "concurrently \"npm --prefix backend start\" \"npm --prefix frontend run dev -- --host\"",
+    "all": "systemctl start caddy dnsmasq && concurrently \"npm --prefix backend start\" \"npm --prefix frontend run dev -- --host\"",
     "test": "npm --prefix backend test && npm --prefix frontend test && python3 hash/test_fixtures.py"
   },
   "devDependencies": {
