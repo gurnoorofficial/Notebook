@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """
-Verify a notebook block's hash.
+Verify a Notebook blockchain.json (or a single block / bare block array)
+offline, independent of the running app.
 
-Recomputes the block hash the same way backend/services/blockchainService.js
-does (drop "hash", recursively sort keys, compact JSON, escape non-ASCII,
-Keccak-256) and compares it against the "hash" field stored in the block.
+Input: either a path to a blockchain.json file, or the JSON pasted directly
+(the full { "chain": [...] } export, a bare [block, ...] array, or a single
+block object all work).
+
+For every block this recomputes the hash the same way
+backend/services/blockchainService.js does (drop "hash", recursively sort
+keys, compact JSON, escape non-ASCII, Keccak-256) and compares it against
+the block's own "hash" field, and checks that "previous_hash" correctly
+links to the prior block's hash.
 
 Run directly with python3:
     python3 hash/hashverify.py
@@ -25,6 +32,8 @@ except ImportError:
             "Install it with: sudo apt install python3-pycryptodome\n"
             "or: pip install --user --break-system-packages pycryptodome"
         )
+
+GENESIS_PREVIOUS_HASH = "0" * 64
 
 
 def sort_json_value(value):
@@ -53,10 +62,13 @@ def calculate_block_hash(block: dict) -> str:
     return keccak256_hex(canonical.encode("utf-8"))
 
 
+def strip_hex_prefix(value: str) -> str:
+    return value[2:] if value[:2].lower() == "0x" else value
+
+
 def read_json_input() -> str:
     path_input = input(
-        "Enter path to a .txt file with the block JSON, "
-        "or press Enter to paste the JSON directly: "
+        "Enter path to blockchain.json, or press Enter to paste the JSON directly: "
     ).strip()
 
     if path_input:
@@ -66,7 +78,7 @@ def read_json_input() -> str:
         with open(path_input, "r", encoding="utf-8") as handle:
             return handle.read()
 
-    print("Paste the block JSON below, then press Enter on a blank line (or Ctrl+D) when done:")
+    print("Paste the JSON below, then press Enter on a blank line (or Ctrl+D) when done:")
 
     lines = []
 
@@ -84,19 +96,47 @@ def read_json_input() -> str:
     return "\n".join(lines)
 
 
-def verify_block(block: dict, label: str) -> bool:
+def extract_blocks(data):
+    if isinstance(data, dict) and isinstance(data.get("chain"), list):
+        return data["chain"]
+
+    if isinstance(data, list):
+        return data
+
+    if isinstance(data, dict) and "hash" in data:
+        return [data]
+
+    sys.exit(
+        "Could not find a block to verify. Expected a blockchain.json "
+        '(an object with a "chain" array), a bare array of blocks, or a '
+        "single block object."
+    )
+
+
+def verify_block(block: dict, previous_block) -> bool:
+    index = block.get("index", "?")
     expected_hash = str(block.get("hash", "")).strip()
     actual_hash = calculate_block_hash(block)
+    expected_hash_normalized = strip_hex_prefix(expected_hash) if expected_hash else expected_hash
+    hash_matches = expected_hash_normalized.lower() == actual_hash.lower()
 
-    expected_hash_normalized = expected_hash[2:] if expected_hash[:2].lower() == "0x" else expected_hash
-    matched = expected_hash_normalized.lower() == actual_hash.lower()
-
-    print(f"\n{label}")
+    print(f"\nBlock #{index}")
     print(f"  Expected hash: {expected_hash or '(missing)'}")
-    print(f"  Actual hash:   {actual_hash}")
-    print(f"  Result:        {'MATCH ✓' if matched else 'MISMATCH ✗'}")
+    print(f"  Actual hash:   0x{actual_hash}")
+    print(f"  Hash:          {'MATCH ✓' if hash_matches else 'MISMATCH ✗'}")
 
-    return matched
+    previous_hash = str(block.get("previous_hash", "")).strip()
+    previous_hash_normalized = strip_hex_prefix(previous_hash)
+
+    if previous_block is None:
+        link_matches = previous_hash_normalized.lower() == GENESIS_PREVIOUS_HASH
+        print(f"  Chain link:    {'MATCH (genesis) ✓' if link_matches else 'MISMATCH ✗'}")
+    else:
+        expected_previous_hash = strip_hex_prefix(str(previous_block.get("hash", "")).strip())
+        link_matches = previous_hash_normalized.lower() == expected_previous_hash.lower()
+        print(f"  Chain link:    {'MATCH ✓' if link_matches else 'MISMATCH ✗'}")
+
+    return hash_matches and link_matches
 
 
 def main():
@@ -107,21 +147,23 @@ def main():
     except json.JSONDecodeError as error:
         sys.exit(f"Invalid JSON: {error}")
 
-    if isinstance(data, list):
-        results = [
-            verify_block(block, f"Block #{block.get('index', index)}")
-            for index, block in enumerate(data)
-        ]
+    blocks = extract_blocks(data)
 
-        print(f"\n{sum(results)}/{len(results)} blocks verified successfully.")
+    if not blocks:
+        sys.exit("No blocks found to verify.")
 
-        if not all(results):
-            sys.exit(1)
-    elif isinstance(data, dict):
-        if not verify_block(data, f"Block #{data.get('index', '?')}"):
-            sys.exit(1)
-    else:
-        sys.exit("Input must be a block object or a list of blocks.")
+    results = []
+    previous_block = None
+
+    for block in blocks:
+        results.append(verify_block(block, previous_block))
+        previous_block = block
+
+    passed = sum(results)
+    print(f"\n{passed}/{len(results)} blocks verified successfully.")
+
+    if not all(results):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

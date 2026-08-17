@@ -2,12 +2,17 @@
   "chain": [
     {
       "index": 0,
-      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
-      "message": "BLOCK #0 GENESIS\n\nDon't trust me. Trust the hash.\nProof over promises.\nWritten then. Proven now. 2026-08-09T08:56:23",
+      "previous_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "merkle_root": null,
+      "message": "BLOCK #0 GENESIS\n\nDon't trust me. Trust the hash.\nProof over promises.\nWritten then. Proven now. 2026-08-17T14:55:14",
+      "message_encoding": "utf-8",
       "eth_address": "0xd369bd534f678195f9341d2f55c80f7f9e56abb0",
-      "signature": "0xf6f46f3f832f97e93859b487070bfbbb6b7c8f8b54baf5df042e6ea1dd3ec2031a0a3a876b576a75765b8250cc95bd158043770ab3f33d8d90384ba50c7d9e321c",
-      "timestamp": "2026-08-09T08:56:42",
-      "hash": "21ec5daaa1d20057daf6daf6a291c47209b5f9f0a5ed6a8ecc6de436af07b39d"
+      "signature": {
+        "scheme": "secp256k1",
+        "value": "0x0b6bdef0714a8a4be428a5305ad2e31d761049a3622a643ce2886c38e73d81a46a8d47d1dbd6680de11d56aecb8e39309dd45d74c585899b275d1a544c9b10301b"
+      },
+      "timestamp": "2026-08-17T14:55:25Z",
+      "hash": "0xd896905b2379ed500fb4da0ab4e822ae7db0f4cb2795e7aefd88b4a1d02865ca"
     }
   ]
 }

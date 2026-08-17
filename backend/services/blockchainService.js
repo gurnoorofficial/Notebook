@@ -6,8 +6,6 @@ const { readBlockchain, writeBlockchain } = require("../utils/blockchainStore");
 
 const { buildMerkleRoot } = require("./merkleTree");
 
-const CURRENT_SCHEMA_VERSION = "2.0";
-
 const GENESIS_PREVIOUS_HASH = "0".repeat(64);
 
 function stripHexPrefix(value) {
@@ -274,7 +272,6 @@ async function addBlock({ message, signature }) {
   );
 
   const newBlock = {
-    schema_version: CURRENT_SCHEMA_VERSION,
     index: blockchain.chain.length,
     previous_hash: withHexPrefix(previousHash),
     merkle_root: merkleRoot === null ? null : withHexPrefix(merkleRoot),
